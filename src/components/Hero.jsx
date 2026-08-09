@@ -2,190 +2,209 @@ import { Link } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import { posterUrl, BACKDROP_SIZE } from '../services/tmdb'
 
-const PlayIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <polygon points="5 3 19 12 5 21 5 3" />
-  </svg>
-)
-const PlusIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="w-5 h-5">
-    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
-)
-const ChevronLeft = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8">
-    <polyline points="15 18 9 12 15 6" />
-  </svg>
-)
-const ChevronRight = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8">
-    <polyline points="9 18 15 12 9 6" />
-  </svg>
-)
-
-const INTERVAL = 4000
-
 export default function Hero({ items = [] }) {
-  const [current, setCurrent] = useState(0)
-  const intervalRef = useRef(null)
-  const itemsRef = useRef(items)
-  const currentRef = useRef(0)
-  const touchStartX = useRef(null)
+  const [index, setIndex] = useState(0)
+  const timerRef = useRef(null)
+  const touchX = useRef(null)
 
-  // Keep refs in sync
-  useEffect(() => { itemsRef.current = items }, [items])
-  useEffect(() => { currentRef.current = current }, [current])
-
-  // Start interval once on mount — reads from refs so never stale
-  useEffect(() => {
-    intervalRef.current = setInterval(() => {
-      const len = itemsRef.current.length
-      if (len === 0) return
-      setCurrent((c) => (c + 1) % len)
-    }, INTERVAL)
-    return () => clearInterval(intervalRef.current)
-  }, []) // empty deps — runs once, never restarts
-
-  const goTo = (index) => {
-    const len = itemsRef.current.length
-    if (len === 0) return
-    const next = ((index % len) + len) % len
-    setCurrent(next)
-    // Reset timer so user gets full interval after manual nav
-    clearInterval(intervalRef.current)
-    intervalRef.current = setInterval(() => {
-      setCurrent((c) => (c + 1) % itemsRef.current.length)
-    }, INTERVAL)
+  function next(i, len) {
+    return (i + 1) % len
+  }
+  function prev(i, len) {
+    return (i - 1 + len) % len
   }
 
-  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX }
-  const onTouchEnd = (e) => {
-    if (touchStartX.current === null) return
-    const diff = touchStartX.current - e.changedTouches[0].clientX
-    if (Math.abs(diff) > 50) goTo(diff > 0 ? currentRef.current + 1 : currentRef.current - 1)
-    touchStartX.current = null
+  // Auto-rotate every 4 seconds — restarts whenever index or items change
+  useEffect(() => {
+    if (items.length < 2) return
+    timerRef.current = setTimeout(() => {
+      setIndex((i) => next(i, items.length))
+    }, 4000)
+    return () => clearTimeout(timerRef.current)
+  }, [index, items.length])
+
+  function goNext() {
+    clearTimeout(timerRef.current)
+    setIndex((i) => next(i, items.length))
+  }
+
+  function goPrev() {
+    clearTimeout(timerRef.current)
+    setIndex((i) => prev(i, items.length))
+  }
+
+  function goTo(i) {
+    clearTimeout(timerRef.current)
+    setIndex(i)
+  }
+
+  function onTouchStart(e) {
+    touchX.current = e.touches[0].clientX
+  }
+
+  function onTouchEnd(e) {
+    if (touchX.current === null) return
+    const diff = touchX.current - e.changedTouches[0].clientX
+    if (diff > 50) goNext()
+    else if (diff < -50) goPrev()
+    touchX.current = null
   }
 
   if (!items.length) return null
 
-  const item = items[current]
-  const { id, title, name, overview, vote_average, backdrop_path, release_date, first_air_date, media_type } = item
-  const displayTitle = title || name
-  const year = (release_date || first_air_date || '').slice(0, 4)
-  const isTV = media_type === 'tv' || (!title && !!name)
+  const item = items[index]
+  const title = item.title || item.name || ''
+  const year = (item.release_date || item.first_air_date || '').slice(0, 4)
+  const isTV = item.media_type === 'tv' || (!item.title && !!item.name)
+  const rating = item.vote_average ? item.vote_average.toFixed(1) : null
 
   return (
     <div
-      className="relative w-full h-[88vh] flex items-end overflow-hidden select-none"
+      className="relative w-full overflow-hidden select-none"
+      style={{ height: '88vh' }}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
-      {/* Backdrops — crossfade */}
+      {/* All backdrops stacked, only current is visible */}
       {items.map((it, i) => (
         <img
           key={it.id}
           src={posterUrl(it.backdrop_path, BACKDROP_SIZE)}
           alt={it.title || it.name}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${
-            i === current ? 'opacity-100' : 'opacity-0'
-          }`}
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            objectFit: 'cover',
+            opacity: i === index ? 1 : 0,
+            transition: 'opacity 1s ease',
+            zIndex: 0,
+          }}
         />
       ))}
 
-      {/* Gradients */}
-      <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+      {/* Dark overlays */}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 50%, transparent 100%)', zIndex: 1 }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,1) 0%, transparent 60%)', zIndex: 1 }} />
 
-      {/* Left arrow — desktop only, full height, far left edge */}
+      {/* LEFT ARROW — desktop only */}
       <button
-        onClick={() => goTo(current - 1)}
-        className="hidden md:flex absolute left-0 top-0 bottom-0 w-20 z-20
-                   items-center justify-center
-                   text-white/40 hover:text-white
-                   bg-gradient-to-r from-black/40 to-transparent
-                   hover:from-black/70
-                   transition-all duration-200"
+        onClick={goPrev}
+        style={{
+          display: 'none',
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: '80px', zIndex: 10,
+          alignItems: 'center', justifyContent: 'center',
+          background: 'linear-gradient(to right, rgba(0,0,0,0.6), transparent)',
+          border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)',
+          transition: 'color 0.2s',
+        }}
+        className="md-arrow-btn"
+        onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+        onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.7)'}
       >
-        <ChevronLeft />
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
       </button>
 
-      {/* Right arrow — desktop only, full height, far right edge */}
+      {/* RIGHT ARROW — desktop only */}
       <button
-        onClick={() => goTo(current + 1)}
-        className="hidden md:flex absolute right-0 top-0 bottom-0 w-20 z-20
-                   items-center justify-center
-                   text-white/40 hover:text-white
-                   bg-gradient-to-l from-black/40 to-transparent
-                   hover:from-black/70
-                   transition-all duration-200"
+        onClick={goNext}
+        style={{
+          display: 'none',
+          position: 'absolute', right: 0, top: 0, bottom: 0,
+          width: '80px', zIndex: 10,
+          alignItems: 'center', justifyContent: 'center',
+          background: 'linear-gradient(to left, rgba(0,0,0,0.6), transparent)',
+          border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)',
+          transition: 'color 0.2s',
+        }}
+        className="md-arrow-btn"
+        onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+        onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.7)'}
       >
-        <ChevronRight />
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
       </button>
 
       {/* Content */}
-      <div className="relative z-10 px-8 md:px-20 pb-20 max-w-2xl w-full">
-        <div className="flex items-center gap-2 mb-4">
-          <span className={`text-xs font-bold px-3 py-1 rounded-full text-white ${isTV ? 'bg-blue-600' : 'bg-red-600'}`}>
+      <div style={{ position: 'absolute', bottom: 80, left: 0, right: 0, zIndex: 5, padding: '0 5%', maxWidth: 700 }}>
+        {/* Badges */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <span style={{ background: isTV ? '#2563eb' : '#dc2626', color: '#fff', fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 999 }}>
             {isTV ? '📺 SERIES' : '🎬 MOVIE'}
           </span>
-          {vote_average > 0 && (
-            <span className="text-xs font-semibold text-yellow-400 bg-yellow-400/10 px-3 py-1 rounded-full border border-yellow-400/20">
-              ⭐ {vote_average.toFixed(1)}
+          {rating && (
+            <span style={{ background: 'rgba(234,179,8,0.15)', color: '#facc15', fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 999, border: '1px solid rgba(234,179,8,0.3)' }}>
+              ⭐ {rating}
             </span>
           )}
           {year && (
-            <span className="text-xs text-gray-400 bg-white/10 px-3 py-1 rounded-full">{year}</span>
+            <span style={{ background: 'rgba(255,255,255,0.1)', color: '#9ca3af', fontSize: 11, padding: '4px 12px', borderRadius: 999 }}>
+              {year}
+            </span>
           )}
         </div>
 
-        <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-4 leading-tight drop-shadow-lg">
-          {displayTitle}
+        <h1 style={{ color: '#fff', fontSize: 'clamp(2rem, 5vw, 3.5rem)', fontWeight: 900, lineHeight: 1.1, marginBottom: 16, textShadow: '0 2px 20px rgba(0,0,0,0.8)' }}>
+          {title}
         </h1>
 
-        <p className="text-gray-300 text-sm md:text-base line-clamp-3 mb-8 max-w-xl leading-relaxed">
-          {overview}
+        <p style={{ color: '#d1d5db', fontSize: 15, lineHeight: 1.7, marginBottom: 28, maxWidth: 560, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {item.overview}
         </p>
 
-        <div className="flex gap-3 flex-wrap">
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <Link
-            to={`/movie/${id}`}
-            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-semibold transition shadow-lg shadow-red-900/40"
+            to={`/movie/${item.id}`}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#dc2626', color: '#fff', padding: '12px 24px', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', boxShadow: '0 8px 24px rgba(220,38,38,0.4)' }}
           >
-            <PlayIcon /> Watch Trailer
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+            Watch Trailer
           </Link>
           <Link
-            to={`/movie/${id}`}
-            className="flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white px-6 py-3 rounded-xl font-semibold transition backdrop-blur-sm border border-white/10"
+            to={`/movie/${item.id}`}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.12)', color: '#fff', padding: '12px 24px', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}
           >
-            <PlusIcon /> Watchlist
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            Watchlist
           </Link>
         </div>
       </div>
 
       {/* Dot indicators */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2">
+      <div style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
         {items.map((_, i) => (
           <button
             key={i}
             onClick={() => goTo(i)}
-            className={`rounded-full transition-all duration-300 ${
-              i === current ? 'w-6 h-2 bg-red-600' : 'w-2 h-2 bg-white/30 hover:bg-white/60'
-            }`}
+            style={{
+              border: 'none', cursor: 'pointer', padding: 0,
+              borderRadius: 999,
+              width: i === index ? 24 : 8,
+              height: 8,
+              background: i === index ? '#dc2626' : 'rgba(255,255,255,0.3)',
+              transition: 'all 0.3s ease',
+            }}
           />
         ))}
       </div>
 
       {/* Progress bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10 z-20">
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'rgba(255,255,255,0.1)', zIndex: 10 }}>
         <div
-          key={current}
-          className="h-full bg-red-600"
-          style={{ animation: `progress ${INTERVAL}ms linear forwards` }}
+          key={index}
+          style={{
+            height: '100%', background: '#dc2626',
+            animation: 'heroProgress 4s linear forwards',
+          }}
         />
       </div>
 
       <style>{`
-        @keyframes progress { from { width: 0% } to { width: 100% } }
+        @keyframes heroProgress { from { width: 0% } to { width: 100% } }
+        @media (min-width: 768px) { .md-arrow-btn { display: flex !important; } }
       `}</style>
     </div>
   )
