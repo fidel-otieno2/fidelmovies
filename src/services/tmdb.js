@@ -21,5 +21,11 @@ export const searchMovies = (query, page = 1) => tmdb.get('/search/movie', { par
 export const getGenres = () => tmdb.get('/genre/movie/list')
 export const getMoviesByGenre = (genreId, page = 1) => tmdb.get('/discover/movie', { params: { with_genres: genreId, page } })
 
+// TV / Series
+export const getTrendingTV = () => tmdb.get('/trending/tv/week')
+export const getPopularTV = () => tmdb.get('/tv/popular')
+export const getTopRatedTV = () => tmdb.get('/tv/top_rated')
+export const getAiringToday = () => tmdb.get('/tv/airing_today')
+
 export const posterUrl = (path, size = POSTER_SIZE) =>
   path ? `${IMAGE_BASE}/${size}${path}` : '/placeholder.png'

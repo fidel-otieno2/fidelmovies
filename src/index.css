@@ -24,3 +24,8 @@ body {
   background: #e50914;
   border-radius: 3px;
 }
+
+/* Hide scrollbar on movie rows */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
