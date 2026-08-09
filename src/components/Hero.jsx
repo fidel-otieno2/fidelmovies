@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { posterUrl, BACKDROP_SIZE } from '../services/tmdb'
 
 const PlayIcon = () => (
@@ -23,36 +23,46 @@ const ChevronRight = () => (
   </svg>
 )
 
+const INTERVAL = 4000
+
 export default function Hero({ items = [] }) {
   const [current, setCurrent] = useState(0)
   const intervalRef = useRef(null)
+  const itemsRef = useRef(items)
+  const currentRef = useRef(0)
   const touchStartX = useRef(null)
 
-  const startTimer = useCallback(() => {
-    clearInterval(intervalRef.current)
-    intervalRef.current = setInterval(() => {
-      setCurrent((i) => (i + 1) % items.length)
-    }, 4000)
-  }, [items.length])
+  // Keep refs in sync
+  useEffect(() => { itemsRef.current = items }, [items])
+  useEffect(() => { currentRef.current = current }, [current])
 
-  // Start auto-rotation as soon as items are available — no pause on hover
+  // Start interval once on mount — reads from refs so never stale
   useEffect(() => {
-    if (items.length === 0) return
-    startTimer()
+    intervalRef.current = setInterval(() => {
+      const len = itemsRef.current.length
+      if (len === 0) return
+      setCurrent((c) => (c + 1) % len)
+    }, INTERVAL)
     return () => clearInterval(intervalRef.current)
-  }, [items.length, startTimer])
+  }, []) // empty deps — runs once, never restarts
 
   const goTo = (index) => {
-    setCurrent((index + items.length) % items.length)
-    startTimer() // reset timer on manual nav
+    const len = itemsRef.current.length
+    if (len === 0) return
+    const next = ((index % len) + len) % len
+    setCurrent(next)
+    // Reset timer so user gets full interval after manual nav
+    clearInterval(intervalRef.current)
+    intervalRef.current = setInterval(() => {
+      setCurrent((c) => (c + 1) % itemsRef.current.length)
+    }, INTERVAL)
   }
 
-  // Touch swipe support for mobile
   const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX }
   const onTouchEnd = (e) => {
     if (touchStartX.current === null) return
     const diff = touchStartX.current - e.changedTouches[0].clientX
-    if (Math.abs(diff) > 50) goTo(diff > 0 ? current + 1 : current - 1)
+    if (Math.abs(diff) > 50) goTo(diff > 0 ? currentRef.current + 1 : currentRef.current - 1)
     touchStartX.current = null
   }
 
@@ -86,30 +96,36 @@ export default function Hero({ items = [] }) {
       <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
 
-      {/* Left arrow — desktop only, hugs the left edge */}
+      {/* Left arrow — desktop only, full height, far left edge */}
       <button
         onClick={() => goTo(current - 1)}
-        className="hidden md:flex absolute left-0 top-0 bottom-0 w-16 z-20 items-center justify-start pl-3
-                   bg-gradient-to-r from-black/50 to-transparent
-                   hover:from-black/80 text-white/60 hover:text-white transition-all duration-200"
+        className="hidden md:flex absolute left-0 top-0 bottom-0 w-20 z-20
+                   items-center justify-center
+                   text-white/40 hover:text-white
+                   bg-gradient-to-r from-black/40 to-transparent
+                   hover:from-black/70
+                   transition-all duration-200"
       >
         <ChevronLeft />
       </button>
 
-      {/* Right arrow — desktop only, hugs the right edge */}
+      {/* Right arrow — desktop only, full height, far right edge */}
       <button
         onClick={() => goTo(current + 1)}
-        className="hidden md:flex absolute right-0 top-0 bottom-0 w-16 z-20 items-center justify-end pr-3
-                   bg-gradient-to-l from-black/50 to-transparent
-                   hover:from-black/80 text-white/60 hover:text-white transition-all duration-200"
+        className="hidden md:flex absolute right-0 top-0 bottom-0 w-20 z-20
+                   items-center justify-center
+                   text-white/40 hover:text-white
+                   bg-gradient-to-l from-black/40 to-transparent
+                   hover:from-black/70
+                   transition-all duration-200"
       >
         <ChevronRight />
       </button>
 
       {/* Content */}
-      <div className="relative z-10 px-8 pb-20 max-w-2xl w-full">
+      <div className="relative z-10 px-8 md:px-20 pb-20 max-w-2xl w-full">
         <div className="flex items-center gap-2 mb-4">
-          <span className={`text-xs font-bold px-3 py-1 rounded-full ${isTV ? 'bg-blue-600' : 'bg-red-600'} text-white`}>
+          <span className={`text-xs font-bold px-3 py-1 rounded-full text-white ${isTV ? 'bg-blue-600' : 'bg-red-600'}`}>
             {isTV ? '📺 SERIES' : '🎬 MOVIE'}
           </span>
           {vote_average > 0 && (
@@ -164,15 +180,12 @@ export default function Hero({ items = [] }) {
         <div
           key={current}
           className="h-full bg-red-600"
-          style={{ animation: 'progress 4s linear forwards' }}
+          style={{ animation: `progress ${INTERVAL}ms linear forwards` }}
         />
       </div>
 
       <style>{`
-        @keyframes progress {
-          from { width: 0% }
-          to   { width: 100% }
-        }
+        @keyframes progress { from { width: 0% } to { width: 100% } }
       `}</style>
     </div>
   )
