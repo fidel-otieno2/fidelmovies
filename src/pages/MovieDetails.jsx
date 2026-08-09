@@ -5,6 +5,40 @@ import { getWatchlist, addToWatchlist, removeFromWatchlist, getReviews, addRevie
 import { useAuth } from '../context/AuthContext'
 import MovieRow from '../components/MovieRow'
 
+function TrailerModal({ videoKey, onClose }) {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-4xl aspect-video rounded-2xl overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <iframe
+          src={`https://www.youtube.com/embed/${videoKey}?autoplay=1&rel=0`}
+          title="Trailer"
+          allow="autoplay; fullscreen"
+          allowFullScreen
+          className="w-full h-full"
+        />
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 w-9 h-9 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black transition text-lg"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function MovieDetails() {
   const { id } = useParams()
   const { user } = useAuth()
@@ -15,6 +49,7 @@ export default function MovieDetails() {
 
   const [inWatchlist, setInWatchlist] = useState(false)
   const [watchlistLoading, setWatchlistLoading] = useState(false)
+  const [trailerOpen, setTrailerOpen] = useState(false)
 
   const [reviews, setReviews] = useState([])
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
@@ -97,8 +132,17 @@ export default function MovieDetails() {
   const cast = movie.credits?.cast?.slice(0, 10) || []
   const similar = movie.similar?.results?.slice(0, 12) || []
 
+  // Watch providers for the user's region (fallback to US)
+  const providers = movie['watch/providers']?.results
+  const regionProviders = providers?.KE || providers?.US || providers?.GB || Object.values(providers || {})[0]
+  const streamProviders = regionProviders?.flatrate || []
+  const rentProviders = regionProviders?.rent || []
+  const buyProviders = regionProviders?.buy || []
+  const watchLink = regionProviders?.link
+
   return (
     <div>
+      {trailerOpen && trailer && <TrailerModal videoKey={trailer.key} onClose={() => setTrailerOpen(false)} />}
       {/* Backdrop */}
       <div className="relative w-full h-[60vh]">
         <img src={posterUrl(movie.backdrop_path, BACKDROP_SIZE)} alt={movie.title} className="w-full h-full object-cover" />
@@ -126,14 +170,13 @@ export default function MovieDetails() {
 
           <div className="flex gap-3 mt-5 flex-wrap">
             {trailer && (
-              <a
-                href={`https://www.youtube.com/watch?v=${trailer.key}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold transition"
+              <button
+                onClick={() => setTrailerOpen(true)}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold transition"
               >
-                ▶ Watch Trailer
-              </a>
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                Watch Trailer
+              </button>
             )}
             {user ? (
               <button
@@ -173,6 +216,62 @@ export default function MovieDetails() {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* Where to Watch */}
+      {(streamProviders.length > 0 || rentProviders.length > 0 || buyProviders.length > 0) && (
+        <section className="px-6 md:px-12 mt-12">
+          <h2 className="text-white text-xl font-bold mb-2">Where to Watch</h2>
+          <p className="text-gray-500 text-xs mb-5">Powered by JustWatch</p>
+
+          {streamProviders.length > 0 && (
+            <div className="mb-5">
+              <p className="text-gray-400 text-sm font-semibold mb-3 uppercase tracking-wider">Stream</p>
+              <div className="flex flex-wrap gap-3">
+                {streamProviders.map((p) => (
+                  <a key={p.provider_id} href={watchLink} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 bg-white/10 hover:bg-white/20 transition px-4 py-2 rounded-xl border border-white/10"
+                  >
+                    <img src={`https://image.tmdb.org/t/p/w45${p.logo_path}`} alt={p.provider_name} className="w-6 h-6 rounded-md" />
+                    <span className="text-white text-sm font-medium">{p.provider_name}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {rentProviders.length > 0 && (
+            <div className="mb-5">
+              <p className="text-gray-400 text-sm font-semibold mb-3 uppercase tracking-wider">Rent</p>
+              <div className="flex flex-wrap gap-3">
+                {rentProviders.map((p) => (
+                  <a key={p.provider_id} href={watchLink} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 bg-white/10 hover:bg-white/20 transition px-4 py-2 rounded-xl border border-white/10"
+                  >
+                    <img src={`https://image.tmdb.org/t/p/w45${p.logo_path}`} alt={p.provider_name} className="w-6 h-6 rounded-md" />
+                    <span className="text-white text-sm font-medium">{p.provider_name}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {buyProviders.length > 0 && (
+            <div className="mb-5">
+              <p className="text-gray-400 text-sm font-semibold mb-3 uppercase tracking-wider">Buy</p>
+              <div className="flex flex-wrap gap-3">
+                {buyProviders.map((p) => (
+                  <a key={p.provider_id} href={watchLink} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 bg-white/10 hover:bg-white/20 transition px-4 py-2 rounded-xl border border-white/10"
+                  >
+                    <img src={`https://image.tmdb.org/t/p/w45${p.logo_path}`} alt={p.provider_name} className="w-6 h-6 rounded-md" />
+                    <span className="text-white text-sm font-medium">{p.provider_name}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
